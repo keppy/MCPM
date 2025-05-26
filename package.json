@@ -1,0 +1,110 @@
+{
+  "name": "@keppylab/mcpm",
+  "version": "0.1.0",
+  "description": "MCPM - The MCP Package Manager. The package manager that manages package managers.",
+  "main": "mcpm.py",
+  "bin": {
+    "mcpm": "./bin/mcpm"
+  },
+  "scripts": {
+    "postinstall": "node scripts/setup.js",
+    "start": "python mcpm.py",
+    "dev": "python mcpm.py --debug",
+    "test": "python -m pytest tests/",
+    "lint": "ruff check .",
+    "format": "ruff format ."
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "package-manager",
+    "mcp-server",
+    "mcpm",
+    "tools"
+  ],
+  "author": "James Dominguez",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keppy/mcpm.git"
+  },
+  "mcp": {
+    "serverType": "python",
+    "runtime": "python3",
+    "tools": [
+      {
+        "name": "list",
+        "description": "List all available MCP servers in the registry"
+      },
+      {
+        "name": "search",
+        "description": "Search for MCP servers by name or description",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query"
+            }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "install",
+        "description": "Install an MCP server from the registry",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the server to install"
+            }
+          },
+          "required": ["name"]
+        }
+      },
+      {
+        "name": "uninstall",
+        "description": "Remove an installed MCP server",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Name of the server to uninstall"
+            }
+          },
+          "required": ["name"]
+        }
+      },
+      {
+        "name": "installed",
+        "description": "List all currently installed MCP servers"
+      }
+    ]
+  },
+  "files": [
+    "mcpm.py",
+    "pyproject.toml",
+    "README.md",
+    "bin/",
+    "scripts/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
