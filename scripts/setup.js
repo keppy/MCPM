@@ -1,3 +1,6 @@
+// Copyright 2024 James Dominguez
+// Licensed under the Apache License, Version 2.0
+
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -14,18 +17,46 @@ try {
     process.exit(1);
 }
 
-// Check for uv (optional but recommended)
+// Create .mcpm directory and venv
+const mcpmHome = path.join(os.homedir(), '.mcpm');
+const venvPath = path.join(mcpmHome, 'venv');
+
+if (!fs.existsSync(mcpmHome)) {
+    fs.mkdirSync(mcpmHome, { recursive: true });
+    console.log(`✓ Created MCPM home directory at ${mcpmHome}`);
+}
+
+// Create virtual environment
+console.log('📦 Creating virtual environment...');
 try {
-    execSync('uv --version', { encoding: 'utf8' });
-    console.log('✓ Found uv - Installing dependencies with uv...');
-    execSync('uv pip install -e .', { stdio: 'inherit' });
+    execSync(`python3 -m venv ${venvPath}`, { stdio: 'inherit' });
+    console.log('✓ Virtual environment created');
 } catch (e) {
-    console.log('⚡ uv not found, trying pip...');
+    console.error('❌ Failed to create virtual environment');
+    process.exit(1);
+}
+
+// Determine pip path based on platform
+const pipPath = process.platform === 'win32'
+    ? path.join(venvPath, 'Scripts', 'pip.exe')
+    : path.join(venvPath, 'bin', 'pip');
+
+// Install dependencies into venv
+console.log('📥 Installing dependencies...');
+try {
+    // Check for uv first
+    execSync('uv --version', { encoding: 'utf8', stdio: 'ignore' });
+    console.log('✓ Found uv - Installing with uv...');
+    execSync(`uv pip install --python ${venvPath} aiohttp>=3.9.0`, { stdio: 'inherit' });
+} catch (e) {
+    // Fallback to regular pip
+    console.log('⚡ Using pip to install dependencies...');
     try {
-        execSync('pip3 install aiohttp', { stdio: 'inherit' });
-        console.log('✓ Dependencies installed with pip');
+        execSync(`${pipPath} install --upgrade pip`, { stdio: 'inherit' });
+        execSync(`${pipPath} install aiohttp>=3.9.0`, { stdio: 'inherit' });
+        console.log('✓ Dependencies installed');
     } catch (pipError) {
-        console.error('❌ Failed to install dependencies');
+        console.error('❌ Failed to install dependencies:', pipError.message);
         process.exit(1);
     }
 }
@@ -39,11 +70,30 @@ if (!fs.existsSync(binDir)) {
 const binScript = `#!/usr/bin/env node
 const { spawn } = require('child_process');
 const path = require('path');
+const os = require('os');
 
 const mcpmPath = path.join(__dirname, '..', 'mcpm.py');
-const python = process.platform === 'win32' ? 'python' : 'python3';
+const venvPath = path.join(os.homedir(), '.mcpm', 'venv');
 
-const child = spawn(python, [mcpmPath, ...process.argv.slice(2)], {
+// Use Python from venv
+let pythonPath;
+if (process.platform === 'win32') {
+    pythonPath = path.join(venvPath, 'Scripts', 'python.exe');
+} else {
+    pythonPath = path.join(venvPath, 'bin', 'python');
+}
+
+// Fallback to system Python if venv doesn't exist
+const fs = require('fs');
+if (!fs.existsSync(pythonPath)) {
+    console.error('MCPM virtual environment not found. Running setup...');
+    // Re-run setup
+    const setupPath = path.join(__dirname, '..', 'scripts', 'setup.js');
+    require(setupPath);
+    process.exit(1);
+}
+
+const child = spawn(pythonPath, [mcpmPath, ...process.argv.slice(2)], {
     stdio: 'inherit',
     env: { ...process.env, PYTHONUNBUFFERED: '1' }
 });
@@ -57,13 +107,6 @@ const binPath = path.join(binDir, 'mcpm');
 fs.writeFileSync(binPath, binScript);
 if (process.platform !== 'win32') {
     fs.chmodSync(binPath, '755');
-}
-
-// Create .mcpm directory
-const mcpmHome = path.join(os.homedir(), '.mcpm');
-if (!fs.existsSync(mcpmHome)) {
-    fs.mkdirSync(mcpmHome, { recursive: true });
-    console.log(`✓ Created MCPM home directory at ${mcpmHome}`);
 }
 
 console.log('\n✨ MCPM setup complete!');

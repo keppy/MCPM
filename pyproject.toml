@@ -1,18 +1,18 @@
 [project]
 name = "mcpm"
-version = "0.1.1"
+version = "0.1.2"
 description = "MCPM - The MCP Package Manager"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {text = "Apache-2.0"}
 authors = [
-    { name = "James Dominguez", email = "keppy.rb@gmail.com" }
+    { name = "James Dominguez", email = "james@keppylab.com" }
 ]
 keywords = ["mcp", "package-manager", "model-context-protocol"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -24,7 +24,6 @@ classifiers = [
 
 dependencies = [
     "aiohttp>=3.9.0",
-    "asyncio>=3.4.3",
 ]
 
 [project.optional-dependencies]

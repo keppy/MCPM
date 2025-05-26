@@ -1,4 +1,8 @@
-# MCPM - The MCP Package Manager
+## Example Usage with Claude
+
+```
+Human: Use mcpm to search for database servers
+Assistant: I'll search for database-related MCP servers...# MCPM - The MCP Package Manager
 
 > "The package manager that manages package managers"
 
@@ -12,19 +16,38 @@ MCPM is an MCP server that installs and manages other MCP servers. It's the meta
 - 🔍 **Search**: Find servers by name or description
 - ⚡ **Async**: Built for performance
 - 🔧 **Simple**: Under 200 lines of code
+- 🏠 **Isolated**: Uses its own virtual environment
 
 ## Installation
 
 ### Using npm (recommended)
 ```bash
-npm install -g @mcp/mcpm
+npm install -g @keppylab/mcpm
 ```
 
-### Using uv (for development)
+The npm package will automatically:
+1. Create a virtual environment at `~/.mcpm/venv`
+2. Install Python dependencies (aiohttp)
+3. Set up the `mcpm` command
+
+### For Development
+
+Using uv (fastest):
 ```bash
-git clone https://github.com/your-org/mcpm.git
+git clone https://github.com/keppy/mcpm.git
 cd mcpm
-uv pip install -e .
+chmod +x dev.sh
+./dev.sh
+source .venv/bin/activate
+```
+
+Using pip:
+```bash
+git clone https://github.com/keppy/mcpm.git
+cd mcpm
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
 ```
 
 ## Configuration
@@ -35,7 +58,7 @@ Add MCPM to your MCP settings:
 {
   "mcpm": {
     "command": "npx",
-    "args": ["-y", "@mcp/mcpm"]
+    "args": ["-y", "@keppylab/mcpm"]
   }
 }
 ```
