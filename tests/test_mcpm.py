@@ -6,18 +6,19 @@ Copyright 2024 James Dominguez
 Licensed under the Apache License, Version 2.0
 """
 
-import pytest
 import json
-import subprocess
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
-import sys
 import os
-import shutil
+import subprocess
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from config_manager import MCPConfigManager
 from mcpm import MCPPackageManager, handle_request
 
 
@@ -42,22 +43,36 @@ async def test_list_tools():
     response = await handle_request({"method": "tools/list"})
     assert "tools" in response
     tools = response["tools"]
-    assert len(tools) == 5
+    assert len(tools) == 10
     tool_names = {tool["name"] for tool in tools}
-    assert tool_names == {"list", "search", "install", "uninstall", "installed"}
+    expected_tools = {
+        "list",
+        "search",
+        "install",
+        "uninstall",
+        "installed",
+        "config-add",
+        "config-remove",
+        "config-list",
+        "config-backup",
+        "config-restore",
+    }
+    assert tool_names == expected_tools
 
 
 @pytest.mark.asyncio
 async def test_search_functionality(mcpm):
     """Test search functionality"""
-    # Mock registry
+    # Mock registry - bypass network call
     mcpm.registry = {
         "test-server": {"description": "A test MCP server"},
         "another-server": {"description": "Another server for testing"},
-        "database-tool": {"description": "Database management MCP"}
+        "database-tool": {"description": "Database management MCP"},
     }
 
-    results = await mcpm.search("test")
+    with patch.object(mcpm, '_fetch_registry', new_callable=AsyncMock) as mock_fetch:
+        results = await mcpm.search("test")
+
     assert len(results) == 2
     assert any(r["name"] == "test-server" for r in results)
     assert any(r["name"] == "another-server" for r in results)
@@ -66,25 +81,23 @@ async def test_search_functionality(mcpm):
 @pytest.mark.asyncio
 async def test_install_npm_package(mcpm):
     """Test npm package installation"""
-    mcpm.registry = {
-        "test-package": {"npm": "@test/package", "description": "Test package"}
-    }
+    mcpm.registry = {"test-package": {"npm": "@test/package", "description": "Test package"}}
 
-    with patch("asyncio.create_subprocess_exec") as mock_exec:
-        mock_process = AsyncMock()
-        mock_process.communicate = AsyncMock(return_value=(b"", b""))
-        mock_process.returncode = 0
-        mock_exec.return_value = mock_process
+    with patch.object(mcpm, '_fetch_registry', new_callable=AsyncMock):
+        with patch("asyncio.create_subprocess_exec") as mock_exec:
+            mock_process = AsyncMock()
+            mock_process.communicate = AsyncMock(return_value=(b"", b""))
+            mock_process.returncode = 0
+            mock_exec.return_value = mock_process
 
-        result = await mcpm.install("test-package")
+            result = await mcpm.install("test-package")
 
-        assert result["method"] == "npm"
-        assert result["package"] == "@test/package"
-        assert result["status"] == "installed"
-        mock_exec.assert_called_once_with(
-            "npm", "install", "-g", "@test/package",
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE
-        )
+            assert result["method"] == "npm"
+            assert result["package"] == "@test/package"
+            assert result["status"] == "installed"
+            mock_exec.assert_called_once_with(
+                "npm", "install", "-g", "@test/package", stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
 
 
 @pytest.mark.asyncio
@@ -93,7 +106,10 @@ async def test_install_already_installed(mcpm):
     mcpm.installed = {"existing-package": {"method": "npm", "details": {}}}
     mcpm.registry = {"existing-package": {"npm": "@existing/package"}}
 
-    result = await mcpm.install("existing-package")
+    with patch.object(mcpm, '_fetch_registry', new_callable=AsyncMock):
+        with patch.object(mcpm, '_load_installed', new_callable=AsyncMock):
+            result = await mcpm.install("existing-package")
+
     assert "error" in result
     assert "already installed" in result["error"]
 
@@ -103,18 +119,16 @@ async def test_uninstall_package(mcpm):
     """Test package uninstallation"""
     # Setup installed package
     mcpm.installed = {
-        "test-package": {
-            "method": "git",
-            "details": {"path": "/tmp/test_mcpm/repos/test-package"}
-        }
+        "test-package": {"method": "git", "details": {"path": "/tmp/test_mcpm/repos/test-package"}}
     }
 
-    with patch("shutil.rmtree") as mock_rmtree:
-        result = await mcpm.uninstall("test-package")
+    with patch("pathlib.Path.exists", return_value=True):
+        with patch("shutil.rmtree") as mock_rmtree:
+            result = await mcpm.uninstall("test-package")
 
-        assert result["status"] == "uninstalled"
-        assert result["name"] == "test-package"
-        assert "test-package" not in mcpm.installed
+            assert result["status"] == "uninstalled"
+            assert result["name"] == "test-package"
+            assert "test-package" not in mcpm.installed
 
 
 @pytest.mark.asyncio
@@ -133,6 +147,77 @@ async def test_registry_fetch_error(mcpm):
 
         with pytest.raises(Exception):
             await mcpm._fetch_registry()
+
+
+@pytest.mark.asyncio
+async def test_config_list_empty():
+    """Test config-list tool with no configs"""
+    request = {"method": "tools/call", "params": {"name": "config-list", "arguments": {}}}
+
+    with patch.object(MCPConfigManager, "load_config", new_callable=AsyncMock, return_value={"mcpServers": {}}):
+        response = await handle_request(request)
+
+    assert "content" in response
+    result = json.loads(response["content"][0]["text"])
+    assert isinstance(result, list)
+    assert len(result) == 0
+
+
+@pytest.mark.asyncio
+async def test_config_add_not_installed():
+    """Test config-add with server not installed"""
+    request = {
+        "method": "tools/call",
+        "params": {"name": "config-add", "arguments": {"name": "nonexistent-server"}},
+    }
+
+    response = await handle_request(request)
+    assert "content" in response
+    result = json.loads(response["content"][0]["text"])
+    assert "error" in result
+    assert "not installed" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_config_backup():
+    """Test config backup functionality"""
+    request = {"method": "tools/call", "params": {"name": "config-backup", "arguments": {}}}
+
+    with patch.object(MCPConfigManager, "backup_config") as mock_backup:
+        mock_backup.return_value = "/tmp/backup_20240101_120000"
+
+        response = await handle_request(request)
+
+    assert "content" in response
+    result = json.loads(response["content"][0]["text"])
+    assert "backup" in result
+    assert result["backup"] == "/tmp/backup_20240101_120000"
+
+
+def test_config_manager_initialization():
+    """Test config manager initialization"""
+    config_mgr = MCPConfigManager()
+
+    # Should not crash and should initialize properly
+    assert config_mgr.backup_dir.exists()
+    assert config_mgr.config_path is not None
+
+
+def test_config_manager_generate_config():
+    """Test server config generation"""
+    config_mgr = MCPConfigManager()
+
+    # Test npm server config
+    npm_details = {"method": "npm", "package": "@test/server"}
+    config = config_mgr.generate_server_config(npm_details)
+    assert config["command"] == "npx"
+    assert config["args"] == ["-y", "@test/server"]
+
+    # Test git server config
+    git_details = {"method": "git", "path": "/tmp/test-repo"}
+    config = config_mgr.generate_server_config(git_details)
+    assert config["command"] == "python"
+    assert "/tmp/test-repo/server.py" in config["args"][0]
 
 
 if __name__ == "__main__":

@@ -21,12 +21,15 @@ limitations under the License.
 
 import asyncio
 import json
+import logging
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
 import aiohttp
-import logging
+
+from config_manager import MCPConfigManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcpm")
@@ -37,11 +40,12 @@ MCPM_HOME = Path.home() / ".mcpm"
 INSTALLED_DB = MCPM_HOME / "installed.json"
 CACHE_DIR = MCPM_HOME / "cache"
 
+
 class MCPPackageManager:
     def __init__(self):
         self.session: Optional[aiohttp.ClientSession] = None
-        self.registry: Dict[str, Any] = {}
-        self.installed: Dict[str, Any] = {}
+        self.registry: dict[str, Any] = {}
+        self.installed: dict[str, Any] = {}
         self._ensure_dirs()
 
     def _ensure_dirs(self):
@@ -70,13 +74,15 @@ class MCPPackageManager:
             data = await resp.json()
             self.registry = {s["id"]: s for s in data["servers"]}
 
-    async def list_available(self) -> List[Dict[str, Any]]:
+    async def list_available(self) -> list[dict[str, Any]]:
         """List all servers in the multiverse"""
         await self._fetch_registry()
-        return [{"name": k, "description": v.get("description", ""),
-                "installed": k in self.installed} for k, v in self.registry.items()]
+        return [
+            {"name": k, "description": v.get("description", ""), "installed": k in self.installed}
+            for k, v in self.registry.items()
+        ]
 
-    async def search(self, query: str) -> List[Dict[str, Any]]:
+    async def search(self, query: str) -> list[dict[str, Any]]:
         """Search the cosmic registry"""
         await self._fetch_registry()
         query = query.lower()
@@ -86,7 +92,7 @@ class MCPPackageManager:
                 results.append({"name": name, "description": server.get("description", "")})
         return results
 
-    async def install(self, name: str) -> Dict[str, Any]:
+    async def install(self, name: str) -> dict[str, Any]:
         """Install a server from the void"""
         await self._fetch_registry()
         await self._load_installed()
@@ -115,12 +121,11 @@ class MCPPackageManager:
 
         return result
 
-    async def _install_npm(self, name: str, package: str) -> Dict[str, Any]:
+    async def _install_npm(self, name: str, package: str) -> dict[str, Any]:
         """Channel the npm spirits"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "npm", "install", "-g", package,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                "npm", "install", "-g", package, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
@@ -129,12 +134,11 @@ class MCPPackageManager:
         except Exception as e:
             return {"error": str(e)}
 
-    async def _install_docker(self, name: str, image: str) -> Dict[str, Any]:
+    async def _install_docker(self, name: str, image: str) -> dict[str, Any]:
         """Summon the container daemon"""
         try:
             proc = await asyncio.create_subprocess_exec(
-                "docker", "pull", image,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                "docker", "pull", image, stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
@@ -143,14 +147,13 @@ class MCPPackageManager:
         except Exception as e:
             return {"error": str(e)}
 
-    async def _install_git(self, name: str, repo: str) -> Dict[str, Any]:
+    async def _install_git(self, name: str, repo: str) -> dict[str, Any]:
         """Clone from the source"""
         target = MCPM_HOME / "repos" / name
         target.parent.mkdir(exist_ok=True)
         try:
             proc = await asyncio.create_subprocess_exec(
-                "git", "clone", repo, str(target),
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                "git", "clone", repo, str(target), stdout=subprocess.PIPE, stderr=subprocess.PIPE
             )
             stdout, stderr = await proc.communicate()
             if proc.returncode == 0:
@@ -159,7 +162,7 @@ class MCPPackageManager:
         except Exception as e:
             return {"error": str(e)}
 
-    async def uninstall(self, name: str) -> Dict[str, Any]:
+    async def uninstall(self, name: str) -> dict[str, Any]:
         """Banish a server back to the void"""
         await self._load_installed()
 
@@ -173,13 +176,14 @@ class MCPPackageManager:
             path = Path(info["details"]["path"])
             if path.exists():
                 import shutil
+
                 shutil.rmtree(path)
 
         del self.installed[name]
         await self._save_installed()
         return {"status": "uninstalled", "name": name}
 
-    async def list_installed(self) -> List[Dict[str, Any]]:
+    async def list_installed(self) -> list[dict[str, Any]]:
         """Show the chosen ones"""
         await self._load_installed()
         return [{"name": k, **v} for k, v in self.installed.items()]
@@ -189,8 +193,9 @@ class MCPPackageManager:
         if self.session:
             await self.session.close()
 
+
 # MCP Server Interface
-async def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
+async def handle_request(request: dict[str, Any]) -> dict[str, Any]:
     """The grand dispatcher"""
     mcpm = MCPPackageManager()
 
@@ -205,7 +210,12 @@ async def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
                     {"name": "search", "description": "Search for MCP servers"},
                     {"name": "install", "description": "Install an MCP server"},
                     {"name": "uninstall", "description": "Remove an installed server"},
-                    {"name": "installed", "description": "List installed servers"}
+                    {"name": "installed", "description": "List installed servers"},
+                    {"name": "config-add", "description": "Add installed server to MCP config"},
+                    {"name": "config-remove", "description": "Remove server from MCP config"},
+                    {"name": "config-list", "description": "List servers in MCP config"},
+                    {"name": "config-backup", "description": "Backup current MCP config"},
+                    {"name": "config-restore", "description": "Restore MCP config from backup"},
                 ]
             }
 
@@ -223,6 +233,40 @@ async def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
                 result = await mcpm.uninstall(args.get("name", ""))
             elif tool == "installed":
                 result = await mcpm.list_installed()
+            elif tool == "config-add":
+                config_mgr = MCPConfigManager()
+                server_name = args.get("name", "")
+
+                await mcpm._load_installed()
+                if server_name not in mcpm.installed:
+                    result = {"error": f"Server '{server_name}' not installed. Install it first."}
+                else:
+                    server_info = mcpm.installed[server_name]
+                    server_config = config_mgr.generate_server_config(server_info["details"])
+
+                    if "command" in args:
+                        server_config["command"] = args["command"]
+                    if "args" in args:
+                        server_config["args"] = args["args"]
+
+                    result = await config_mgr.add_server(server_name, server_config)
+
+            elif tool == "config-remove":
+                config_mgr = MCPConfigManager()
+                result = await config_mgr.remove_server(args.get("name", ""))
+
+            elif tool == "config-list":
+                config_mgr = MCPConfigManager()
+                result = await config_mgr.list_configured()
+
+            elif tool == "config-backup":
+                config_mgr = MCPConfigManager()
+                backup_path = await config_mgr.backup_config()
+                result = {"backup": backup_path}
+
+            elif tool == "config-restore":
+                config_mgr = MCPConfigManager()
+                result = await config_mgr.restore_backup(args.get("backup", ""))
             else:
                 result = {"error": f"Unknown tool: {tool}"}
 
@@ -232,6 +276,7 @@ async def handle_request(request: Dict[str, Any]) -> Dict[str, Any]:
         await mcpm.cleanup()
 
     return {"error": {"code": -32601, "message": "Method not found"}}
+
 
 async def main():
     """The eternal loop"""
@@ -246,6 +291,7 @@ async def main():
         except Exception as e:
             logger.error(f"Error: {e}")
 
+
 async def async_stdin():
     """Async stdin reader"""
     loop = asyncio.get_event_loop()
@@ -258,6 +304,7 @@ async def async_stdin():
         if not line:
             break
         yield line.decode().strip()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
