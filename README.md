@@ -128,6 +128,9 @@ But you don't need to know any of that. You just need to know what you want to b
 
 ## Available Commands
 
+### Conversational Mode (Recommended)
+When using MCPM through Claude Desktop, just describe what you want:
+
 | What You Say | What Happens |
 |--------------|--------------|
 | "Search for database servers" | Shows available database MCP servers |
@@ -135,6 +138,33 @@ But you don't need to know any of that. You just need to know what you want to b
 | "Show installed servers" | Lists what you have |
 | "Remove server-name" | Uninstalls cleanly |
 | "Backup my config" | Saves your setup |
+
+### Direct CLI Mode
+MCPM also provides a direct command-line interface for power users:
+
+```bash
+# Package Management
+mcpm list                    # List all available MCP servers
+mcpm search <query>          # Search servers by name/description
+mcpm install <server>        # Install an MCP server
+mcpm uninstall <server>      # Remove an installed server
+mcpm installed               # Show installed servers
+
+# Configuration Management
+mcpm config-add <server>     # Add installed server to MCP config
+mcpm config-remove <server>  # Remove server from config
+mcpm config-list             # List configured servers
+mcpm config-backup           # Backup current configuration
+mcpm config-restore <file>   # Restore from backup
+```
+
+**Examples:**
+```bash
+mcpm search filesystem       # Find file-related servers
+mcpm install postgres        # Install PostgreSQL server
+mcpm config-add postgres     # Add to MCP configuration
+mcpm config-list             # Verify it's configured
+```
 
 ## Real Examples
 

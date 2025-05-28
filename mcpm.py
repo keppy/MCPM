@@ -35,7 +35,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcpm")
 
 # The registry of power
-REGISTRY_URL = "https://raw.githubusercontent.com/modelcontextprotocol/servers/main/servers.json"
+REGISTRY_URL = "https://registry.npmjs.org/-/v1/search?text=scope:modelcontextprotocol&size=250"
 MCPM_HOME = Path.home() / ".mcpm"
 INSTALLED_DB = MCPM_HOME / "installed.json"
 CACHE_DIR = MCPM_HOME / "cache"
@@ -67,12 +67,60 @@ class MCPPackageManager:
         INSTALLED_DB.write_text(json.dumps(self.installed, indent=2))
 
     async def _fetch_registry(self):
-        """Fetch the registry of all MCP servers"""
-        if not self.session:
-            self.session = aiohttp.ClientSession()
-        async with self.session.get(REGISTRY_URL) as resp:
-            data = await resp.json()
-            self.registry = {s["id"]: s for s in data["servers"]}
+        """Load MCP servers registry"""
+        # Use built-in registry of verified MCP servers from @modelcontextprotocol scope
+        self.registry = {
+            "filesystem": {
+                "id": "filesystem",
+                "description": "MCP server for filesystem access",
+                "npm": "@modelcontextprotocol/server-filesystem"
+            },
+            "postgres": {
+                "id": "postgres", 
+                "description": "Read-only database access with schema inspection",
+                "npm": "@modelcontextprotocol/server-postgres"
+            },
+            "brave-search": {
+                "id": "brave-search",
+                "description": "Web and local search using Brave's Search API",
+                "npm": "@modelcontextprotocol/server-brave-search"
+            },
+            "github": {
+                "id": "github",
+                "description": "Repository management, file operations, and GitHub API integration", 
+                "npm": "@modelcontextprotocol/server-github"
+            },
+            "git": {
+                "id": "git",
+                "description": "Tools to read, search, and manipulate Git repositories",
+                "npm": "@modelcontextprotocol/server-git"
+            },
+            "fetch": {
+                "id": "fetch",
+                "description": "Web content fetching and conversion for efficient LLM usage",
+                "npm": "@modelcontextprotocol/server-fetch"
+            },
+            "puppeteer": {
+                "id": "puppeteer", 
+                "description": "Browser automation and web scraping",
+                "npm": "@modelcontextprotocol/server-puppeteer"
+            },
+            "memory": {
+                "id": "memory",
+                "description": "Knowledge graph-based persistent memory system",
+                "npm": "@modelcontextprotocol/server-memory"
+            },
+            "gdrive": {
+                "id": "gdrive",
+                "description": "File access and search capabilities for Google Drive",
+                "npm": "@modelcontextprotocol/server-gdrive"
+            },
+            "google-maps": {
+                "id": "google-maps",
+                "description": "Location services, directions, and place details",
+                "npm": "@modelcontextprotocol/server-google-maps"
+            }
+        }
 
     async def list_available(self) -> list[dict[str, Any]]:
         """List all servers in the multiverse"""
@@ -306,5 +354,111 @@ async def async_stdin():
         yield line.decode().strip()
 
 
+async def cli_main():
+    """CLI interface for MCPM"""
+    import sys
+    
+    if len(sys.argv) < 2:
+        print("Usage: mcpm <command> [args...]")
+        print("Commands: list, search, install, uninstall, installed, config-add, config-remove, config-list, config-backup, config-restore")
+        return
+    
+    command = sys.argv[1]
+    args = sys.argv[2:] if len(sys.argv) > 2 else []
+    
+    mcpm = MCPPackageManager()
+    
+    try:
+        if command == "list":
+            result = await mcpm.list_available()
+            for server in result:
+                print(f"{server['name']}: {server['description']}")
+        
+        elif command == "search":
+            if not args:
+                print("Usage: mcpm search <query>")
+                return
+            result = await mcpm.search(args[0])
+            for server in result:
+                print(f"{server['name']}: {server['description']}")
+        
+        elif command == "install":
+            if not args:
+                print("Usage: mcpm install <server_name>")
+                return
+            result = await mcpm.install(args[0])
+            if "error" in result:
+                print(f"Error: {result['error']}")
+            else:
+                print(f"✅ Installed {args[0]}")
+        
+        elif command == "uninstall":
+            if not args:
+                print("Usage: mcpm uninstall <server_name>")
+                return
+            result = await mcpm.uninstall(args[0])
+            if "error" in result:
+                print(f"Error: {result['error']}")
+            else:
+                print(f"✅ Uninstalled {args[0]}")
+        
+        elif command == "installed":
+            result = await mcpm.list_installed()
+            for server in result:
+                print(f"{server['name']}: {server['method']}")
+        
+        elif command in ["config-add", "config-remove", "config-list", "config-backup", "config-restore"]:
+            from config_manager import MCPConfigManager
+            config_mgr = MCPConfigManager()
+            
+            if command == "config-add":
+                if not args:
+                    print("Usage: mcpm config-add <server_name>")
+                    return
+                await mcpm._load_installed()
+                if args[0] not in mcpm.installed:
+                    print(f"Error: Server '{args[0]}' not installed. Install it first.")
+                    return
+                server_info = mcpm.installed[args[0]]
+                server_config = config_mgr.generate_server_config(server_info["details"])
+                result = await config_mgr.add_server(args[0], server_config)
+                print(f"✅ Added {args[0]} to MCP config" if result else f"❌ Failed to add {args[0]}")
+            
+            elif command == "config-remove":
+                if not args:
+                    print("Usage: mcpm config-remove <server_name>")
+                    return
+                result = await config_mgr.remove_server(args[0])
+                print(f"✅ Removed {args[0]} from config" if result else f"❌ Failed to remove {args[0]}")
+            
+            elif command == "config-list":
+                result = await config_mgr.list_configured()
+                for server in result.get("servers", []):
+                    print(f"{server['name']}: {server['command']} {' '.join(server.get('args', []))}")
+            
+            elif command == "config-backup":
+                backup_path = await config_mgr.backup_config()
+                print(f"✅ Config backed up to: {backup_path}")
+            
+            elif command == "config-restore":
+                if not args:
+                    print("Usage: mcpm config-restore <backup_file>")
+                    return
+                result = await config_mgr.restore_backup(args[0])
+                print(f"✅ Config restored" if result else f"❌ Failed to restore config")
+        
+        else:
+            print(f"Unknown command: {command}")
+    
+    finally:
+        await mcpm.cleanup()
+
+
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Check if running as CLI or MCP server
+    if len(sys.argv) > 1:
+        # CLI mode
+        asyncio.run(cli_main())
+    else:
+        # MCP server mode
+        asyncio.run(main())
