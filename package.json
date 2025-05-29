@@ -1,6 +1,6 @@
 {
   "name": "@keppylab/mcpm",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "MCPM - The MCP Package Manager. The package manager that manages package managers.",
   "main": "mcpm.py",
   "bin": {

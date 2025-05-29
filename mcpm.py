@@ -433,7 +433,7 @@ async def cli_main():
             
             elif command == "config-list":
                 result = await config_mgr.list_configured()
-                for server in result.get("servers", []):
+                for server in result:
                     print(f"{server['name']}: {server['command']} {' '.join(server.get('args', []))}")
             
             elif command == "config-backup":

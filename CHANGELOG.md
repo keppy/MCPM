@@ -5,6 +5,15 @@ All notable changes to MCPM will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2025-05-28
+
+### Fixed
+- **CLI config-list**: Fixed bug where CLI expected dict but method returned list
+- **Error handling**: Improved consistency between CLI and MCP interfaces
+
+### Changed
+- **Testing**: Comprehensive CLI command testing for edge cases and error conditions
+
 ## [0.1.4] - 2025-05-28
 
 ### Fixed
